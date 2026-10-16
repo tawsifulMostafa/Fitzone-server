@@ -37,6 +37,7 @@ async function connectToMongoDB() {
         const userCollection = db.collection("user")
         const classesCollection = db.collection("classes")
         const paymentCollection = db.collection("payment")
+        const userFavoriteCollection = db.collection("favorite")
 
 
         const getUserId = async (req) => {
@@ -49,6 +50,8 @@ async function connectToMongoDB() {
                     $gt: new Date()
                 },
             })
+            console.log(auth)
+
             return session ? session.userId.toString() : null;
         }
 
@@ -91,7 +94,6 @@ async function connectToMongoDB() {
                 if (cls.status !== "approved") {
                     return res.status(400).json({ error: "Class is not approved for booking" });
                 }
-
                 const order = await paymentCollection.insertOne({
                     classId: cls._id,
                     className: cls.className,
@@ -133,8 +135,7 @@ async function connectToMongoDB() {
                 res.status(500).json({ error: "Internal Server Error" });
             }
         })
-        app.post("/api/webhook", 
-            express.raw({ type: "application/json" }), async (req, res) => {
+        app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, res) => {
             let event
             try {
                 event = stripe.webhooks.constructEvent(
@@ -153,7 +154,7 @@ async function connectToMongoDB() {
                 if (session.payment_status === "paid") {
                     const orderId = new ObjectId(session.metadata.orderId)
 
-            
+
                     const result = await paymentCollection.updateOne(
                         { _id: orderId, status: "pending" },
                         { $set: { status: "paid", paidAt: new Date() } }
@@ -170,6 +171,116 @@ async function connectToMongoDB() {
             }
 
             res.json({ received: true })
+        })
+
+        app.get("/api/bookings/check/:classId", async (req, res) => {
+            try {
+                const userId = await getUserId(req)
+                console.log(userId)
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    })
+                }
+                const classId = new ObjectId(req.params.classId)
+
+                const booking = await paymentCollection.findOne({
+                    userId,
+                    classId,
+                    status: "paid"
+                })
+                res.json(booking)
+            } catch (err) {
+                console.error(err)
+                res.status(500).json({ message: "Internal Server Error" })
+            }
+        })
+
+
+        // FAVORITE APIS
+        app.get("/api/favorites/:classId", async (req, res) => {
+            try {
+                const userId = await getUserId(req);
+
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    });
+                }
+
+                const { classId } = req.params;
+
+                if (!ObjectId.isValid(classId)) {
+                    return res.status(400).json({
+                        message: "Invalid Class ID"
+                    });
+                }
+
+                const favorite = await userFavoriteCollection.findOne({
+                    userId,
+                    classId: new ObjectId(classId)
+                });
+
+                res.status(200).json(favorite);
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).json({
+                    message: "Internal Server Error"
+                });
+            }
+        });
+
+        app.post("/api/favorites", async (req, res) => {
+            try {
+                const userId = await getUserId(req)
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    })
+                }
+                const { classId } = req.body
+                const cls = await classesCollection.findOne({
+                    _id: new ObjectId(classId)
+                })
+                if (!cls) {
+                    return res.status(404).json({ message: "Class Not Found" })
+                }
+                const result = await userFavoriteCollection.insertOne({
+                    userId,
+                    classId: cls._id,
+                    createdAt: new Date()
+                })
+
+                res.json(result)
+            } catch (err) {
+                console.error(err)
+                res.status(500).json({ message: "Internal Server Error" })
+            }
+        })
+        app.delete("/api/remove/favorite/:classId", async (req, res) => {
+            try {
+                const userId = await getUserId(req)
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    })
+                }
+                const { classId } = req.params
+                if(!classId){
+                    return res.json({
+                        message : "class not found"
+                    })
+                }
+                const result = await userFavoriteCollection.deleteOne({
+                    userId , 
+                    classId  : new ObjectId(classId)
+                })
+                res.json(result)
+            } catch (error) {
+                console.error(error)
+                res.status(500).json({ message: "Internal Server Error" })
+            }
         })
 
         // TRAINING APIS
