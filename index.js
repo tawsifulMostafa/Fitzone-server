@@ -197,6 +197,31 @@ async function connectToMongoDB() {
             }
         })
         //member apis
+        //member overview
+
+
+        // app.get("/api/dashboard/overview:userId" , async(req , res)=>{
+        //     const userId = await getUserId(req)
+        //     if(!userId){
+        //         return res.json({message : "unauthorized"})
+        //     }
+        //     const totalBookings = await paymentCollection.find({
+        //         userId , 
+        //         status : "paid"
+        //     }).toArray()
+        //     const bookings = []
+        //     for(const totalBooking of totalBookings){
+        //         const classData = await classesCollection.findOne({
+        //             _id : new ObjectId(totalBooking.classId)
+        //         });
+        //         bookings.push({
+        //             ...totalBooking ,
+        //             classData
+        //         })
+        //     }
+        //     res.json(bookings)
+        // })
+
         app.get("/api/member/bookings", async (req, res) => {
             const userId = await getUserId(req)
             if (!userId) {
@@ -227,30 +252,30 @@ async function connectToMongoDB() {
         })
         // apply as a trainer // api for member
         app.post("/api/apply/trainer", async (req, res) => {
-           try {
-             const application = req.body
-            const userId = await getUserId(req)
-            if (!userId) {
-                return res.status(401).json({
-                    message: "unauthorized"
-                });
-            }
-            const newApplication = {
-                ...application,
-                userId , 
-                status: "pending",
-                createdAt: new Date()
-            }
-         await applicationCollection.createIndex(
-                { userId: 1 },
-                { unique: true }
-            );
-            const result = await applicationCollection.insertOne(newApplication);
+            try {
+                const application = req.body
+                const userId = await getUserId(req)
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    });
+                }
+                const newApplication = {
+                    ...application,
+                    userId,
+                    status: "pending",
+                    createdAt: new Date()
+                }
+                await applicationCollection.createIndex(
+                    { userId: 1 },
+                    { unique: true }
+                );
+                const result = await applicationCollection.insertOne(newApplication);
 
-            res.json(result)
-           } catch (error) {
-            res.status(409).json({message : "already exists"})
-           }
+                res.json(result)
+            } catch (error) {
+                res.status(409).json({ message: "already exists" })
+            }
 
         })
 
@@ -331,6 +356,12 @@ async function connectToMongoDB() {
                 });
             }
         });
+                //Todo : this section should not have duplicate . so this one might be unique
+              await userFavoriteCollection.createIndex(
+                    { userId: 1 , classId : 1},
+                    { unique: true }
+                );
+
 
         app.post("/api/favorites", async (req, res) => {
             try {
@@ -347,16 +378,27 @@ async function connectToMongoDB() {
                 if (!cls) {
                     return res.status(404).json({ message: "Class Not Found" })
                 }
+
+
+
+              
                 const result = await userFavoriteCollection.insertOne({
                     userId,
                     classId: cls._id,
                     createdAt: new Date()
                 })
-
                 res.json(result)
             } catch (err) {
-                console.error(err)
-                res.status(500).json({ message: "Internal Server Error" })
+                if (err.code === 11000) {
+                    return res.status(409).json({
+                        message: "Already in favorites"
+                    });
+                }
+
+                console.error(err);
+                res.status(500).json({
+                    message: "Internal Server Error"
+                });
             }
         })
         app.delete("/api/remove/favorite/:classId", async (req, res) => {
