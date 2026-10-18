@@ -38,6 +38,7 @@ async function connectToMongoDB() {
         const classesCollection = db.collection("classes")
         const paymentCollection = db.collection("payment")
         const userFavoriteCollection = db.collection("favorite")
+        const applicationCollection = db.collection("application")
 
 
         const getUserId = async (req) => {
@@ -224,10 +225,53 @@ async function connectToMongoDB() {
 
 
         })
+        // apply as a trainer // api for member
+        app.post("/api/apply/trainer", async (req, res) => {
+           try {
+             const application = req.body
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                });
+            }
+            const newApplication = {
+                ...application,
+                userId , 
+                status: "pending",
+                createdAt: new Date()
+            }
+         await applicationCollection.createIndex(
+                { userId: 1 },
+                { unique: true }
+            );
+            const result = await applicationCollection.insertOne(newApplication);
+
+            res.json(result)
+           } catch (error) {
+            res.status(409).json({message : "already exists"})
+           }
+
+        })
+
+        app.get("/api/apply/trainer", async (req, res) => {
+            const userId = await getUserId(req)
+            if (!userId) {
+                res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+
+            const result = await applicationCollection.findOne({
+                userId,
+                status: "pending"
+            })
+            res.json(result)
+        })
 
 
         // FAVORITE APIS
-         
+
         app.get("/api/dashboard/favorites/:classId", async (req, res) => {
             const userId = await getUserId(req)
             if (!userId) {
@@ -242,7 +286,7 @@ async function connectToMongoDB() {
 
             for (const favoriteBooking of favoritesBookings) {
                 const classData = await classesCollection.findOne({
-                    _id : new ObjectId(favoriteBooking.classId)
+                    _id: new ObjectId(favoriteBooking.classId)
                 })
 
                 favorites.push({
