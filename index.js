@@ -195,9 +195,66 @@ async function connectToMongoDB() {
                 res.status(500).json({ message: "Internal Server Error" })
             }
         })
+        //member apis
+        app.get("/api/member/bookings", async (req, res) => {
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+            const payments = await paymentCollection.find({
+                userId: userId,
+                status: "paid",
+
+            }).toArray()
+            const bookings = [];
+            for (const payment of payments) {
+                const classData = await classesCollection.findOne({
+                    _id: new ObjectId(payment.classId)
+                });
+
+                bookings.push({
+                    ...payment,
+                    classData
+                })
+
+            }
+            res.json(bookings)
+
+
+        })
 
 
         // FAVORITE APIS
+         
+        app.get("/api/dashboard/favorites/:classId", async (req, res) => {
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                });
+            }
+            const favoritesBookings = await userFavoriteCollection.find({
+                userId
+            }).toArray()
+            const favorites = [];
+
+            for (const favoriteBooking of favoritesBookings) {
+                const classData = await classesCollection.findOne({
+                    _id : new ObjectId(favoriteBooking.classId)
+                })
+
+                favorites.push({
+                    ...favoriteBooking,
+                    classData
+                })
+            }
+            res.json(favorites)
+        })
+
+
+
         app.get("/api/favorites/:classId", async (req, res) => {
             try {
                 const userId = await getUserId(req);
@@ -266,15 +323,15 @@ async function connectToMongoDB() {
                         message: "unauthorized"
                     })
                 }
-                const { classId } = req.params
-                if(!classId){
+                const { classId } = req.body
+                if (!classId) {
                     return res.json({
-                        message : "class not found"
+                        message: "class not found"
                     })
                 }
                 const result = await userFavoriteCollection.deleteOne({
-                    userId , 
-                    classId  : new ObjectId(classId)
+                    userId,
+                    classId: new ObjectId(classId)
                 })
                 res.json(result)
             } catch (error) {
