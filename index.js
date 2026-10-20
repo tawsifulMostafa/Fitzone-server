@@ -55,10 +55,38 @@ async function connectToMongoDB() {
 
             return session ? session.userId.toString() : null;
         }
+        //!  verify Role
 
-        // PUBLIC APIS
 
-        // only approved classes will be shown in the featured classes section
+        const verifyRole = (role) => {
+            return async (req, res, next) => {
+                const userId = await getUserId(req);
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    })
+                }
+                const user = await userCollection.findOne(
+                    { _id: new ObjectId(userId) },
+                    {
+                        projection: {
+                            role: 1
+                        }
+                    }
+                )
+                if (!user || user.role !== role) {
+                    return res.status(403).json({
+                        message: "Forbidden"
+                    })
+                }
+                req.userId = userId;
+                next()
+            }
+        }
+
+        // * PUBLIC APIS
+
+        // * only approved classes will be shown in the featured classes section
 
         app.get("/api/featured-classes", async (req, res) => {
             const classes = await classesCollection
@@ -251,6 +279,10 @@ async function connectToMongoDB() {
 
         })
         // apply as a trainer // api for member
+        await applicationCollection.createIndex(
+            { userId: 1 },
+            { unique: true }
+        );
         app.post("/api/apply/trainer", async (req, res) => {
             try {
                 const application = req.body
@@ -266,10 +298,7 @@ async function connectToMongoDB() {
                     status: "pending",
                     createdAt: new Date()
                 }
-                await applicationCollection.createIndex(
-                    { userId: 1 },
-                    { unique: true }
-                );
+
                 const result = await applicationCollection.insertOne(newApplication);
 
                 res.json(result)
@@ -356,11 +385,11 @@ async function connectToMongoDB() {
                 });
             }
         });
-                //Todo : this section should not have duplicate . so this one might be unique
-              await userFavoriteCollection.createIndex(
-                    { userId: 1 , classId : 1},
-                    { unique: true }
-                );
+
+        await userFavoriteCollection.createIndex(
+            { userId: 1, classId: 1 },
+            { unique: true }
+        );
 
 
         app.post("/api/favorites", async (req, res) => {
@@ -381,7 +410,7 @@ async function connectToMongoDB() {
 
 
 
-              
+
                 const result = await userFavoriteCollection.insertOne({
                     userId,
                     classId: cls._id,
@@ -426,12 +455,38 @@ async function connectToMongoDB() {
             }
         })
 
-        // TRAINING APIS
+        // TRAINER APIS
+        //! working in it
+        app.post("/api/create/class", verifyRole("trainer") ,async (req, res) => {
+            try {
+                const classData = req.body
+                const userId = req.userId
+                if(!userId){
+                   return res.status(401).json({
+                        message : "unauthorized"
+                    })
+                }
+                const data = {
+                    ...classData , 
+                    trainerId : userId , 
+                    status : "pending" , 
+                    createdAt : new Date()
+                }
+                const result = await classesCollection.insertOne(data)
+                res.json(result)
+            }catch (error) {
+    console.log(error.message);
+
+    return res.status(500).json({
+        message: "Failed to create class"
+    });
+}
+        })
+
+
 
         // ADMIN APIS
-
-
-
+ 
         console.log("You successfully connected to MongoDB");
         return client;
     } catch (err) {
