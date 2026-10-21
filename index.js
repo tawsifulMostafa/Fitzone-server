@@ -39,8 +39,7 @@ async function connectToMongoDB() {
         const paymentCollection = db.collection("payment")
         const userFavoriteCollection = db.collection("favorite")
         const applicationCollection = db.collection("application")
-
-
+        const postForumCollection = db.collection("forum")
         const getUserId = async (req) => {
             const auth = req.headers.authorization || '';
             if (!auth.toLowerCase().startsWith("bearer "))
@@ -102,12 +101,55 @@ async function connectToMongoDB() {
             res.send(classes)
 
         })
-        app.get('/api/class/:id', async (req, res) => {
-            const id = req.params.id
-            const classData = await classesCollection.findOne({ _id: new ObjectId(id) })
-            res.send(classData)
-        })
-        // payment related apis
+        app.get("/api/class/:classId", async (req, res) => {
+            const { classId } = req.params;
+            const userId = await getUserId(req);
+
+            const classData = await classesCollection.findOne({
+                _id: new ObjectId(classId)
+            });
+            if (!classData) {
+                return res.status(404).json({
+                    message: "Class not found"
+                });
+            }
+
+            //! Approved classes are public
+
+
+            if (classData.status === "approved") {
+                return res.json(classData);
+            }
+
+            // Non-approved classes require authentication
+            if (!userId) {
+                return res.status(403).json({
+                    message: "Forbidden"
+                });
+            }
+
+            const user = await userCollection.findOne({
+                _id: new ObjectId(userId)
+            });
+
+            // Trainer can view their own class
+            if (
+                user?.role === "trainer" &&
+                classData.trainerId === userId
+
+            ) {
+                return res.json(classData);
+            }
+
+            // Admin can review non-approved classes
+            if (user?.role === "admin") {
+                return res.json(classData);
+            }
+
+            return res.status(403).json({
+                message: "Forbidden"
+            });
+        });
 
 
         app.post("/api/checkout", async (req, res) => {
@@ -249,6 +291,7 @@ async function connectToMongoDB() {
         //     }
         //     res.json(bookings)
         // })
+
 
         app.get("/api/member/bookings", async (req, res) => {
             const userId = await getUserId(req)
@@ -456,37 +499,69 @@ async function connectToMongoDB() {
         })
 
         // TRAINER APIS
-        //! working in it
-        app.post("/api/create/class", verifyRole("trainer") ,async (req, res) => {
+
+        // * add forum post
+
+         app.post("/api/forum/post" ,verifyRole("trainer") ,  async(req , res) => {
+            const trainerId = req.userId;
+            const forumData = req.body 
+            const user = await userCollection.findOne({
+                _id : new ObjectId(trainerId)
+            })
+            const result  = await postForumCollection.insertOne({
+                ...forumData ,
+                trainerName : user.name , 
+                trainerId  
+            })
+            res.json(result)
+         })
+
+          
+        app.get("/api/my/class", verifyRole("trainer" || "admin"), async (req, res) => {
+            const trainerId = req.userId;
+            if (!trainerId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            } 
+            const result = await classesCollection.find({
+                trainerId,
+            }).toArray();
+            if (result.length === 0) {
+                return res.status(404).json({ message: "No Class Found" });
+            }
+            return res.json(result);
+        });
+        app.post("/api/create/class", verifyRole("trainer"), async (req, res) => {
             try {
                 const classData = req.body
                 const userId = req.userId
-                if(!userId){
-                   return res.status(401).json({
-                        message : "unauthorized"
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
                     })
                 }
                 const data = {
-                    ...classData , 
-                    trainerId : userId , 
-                    status : "pending" , 
-                    createdAt : new Date()
+                    ...classData,
+                    trainerId: userId,
+                    status: "pending",
+                    createdAt: new Date()
                 }
                 const result = await classesCollection.insertOne(data)
                 res.json(result)
-            }catch (error) {
-    console.log(error.message);
+            } catch (error) {
+                console.log(error.message);
 
-    return res.status(500).json({
-        message: "Failed to create class"
-    });
-}
+                return res.status(500).json({
+                    message: "Failed to create class"
+                });
+            }
         })
 
 
 
         // ADMIN APIS
- 
+
         console.log("You successfully connected to MongoDB");
         return client;
     } catch (err) {
