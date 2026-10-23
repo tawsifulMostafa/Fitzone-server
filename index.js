@@ -105,28 +105,28 @@ async function connectToMongoDB() {
             res.send(classes)
 
         })
-       app.get("/api/class/:classId" , async(req , res) => {
-        const {classId } = req.params;
-        const userId = await getUserId(req)
-        if(!userId){
-            return res.status(401).json({
-                message : "unauthorized"
+        app.get("/api/class/:classId", async (req, res) => {
+            const { classId } = req.params;
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+            const data = await classesCollection.findOne({
+                _id: new ObjectId(classId)
             })
-        }
-        const data =  await classesCollection.findOne({
-            _id : new ObjectId(classId)
-        })
-        const user = await userCollection.findOne({
-            _id : new ObjectId(data.trainerId)
-        })
-        const currentUser = await userCollection.findOne({
-            _id  : new ObjectId(userId)
-        })
-        const classData = {
-            ...data , 
-            trainerName : user?.name 
-        }
-        if (classData.status === "approved") {
+            const user = await userCollection.findOne({
+                _id: new ObjectId(data.trainerId)
+            })
+            const currentUser = await userCollection.findOne({
+                _id: new ObjectId(userId)
+            })
+            const classData = {
+                ...data,
+                trainerName: user?.name
+            }
+            if (classData.status === "approved") {
                 return res.json(classData);
             }
             if (
@@ -140,14 +140,14 @@ async function connectToMongoDB() {
             // Admin can review non-approved classes
             if (currentUser?.role === "admin") {
                 return res.json(classData);
-            } 
+            }
             return res.status(403).json({
                 message: "Forbidden"
             });
-       })
-            
+        })
 
-         
+
+
 
 
         app.post("/api/checkout", async (req, res) => {
@@ -497,8 +497,9 @@ async function connectToMongoDB() {
         })
 
         // TRAINER APIS
+        //* get Forum post 
 
-        // app.get()
+
 
         // * add forum post
 
@@ -518,9 +519,6 @@ async function connectToMongoDB() {
             console.log(result);
             res.json(result)
         })
-
-
-
 
         app.get("/api/my/class", verifyRole("trainer"), async (req, res) => {
             const trainerId = req.userId;
@@ -563,8 +561,36 @@ async function connectToMongoDB() {
                 });
             }
         })
+        // ** Edit Class
+        app.patch("/api/edit/class/:id", verifyRole("trainer"),  async (req, res) => {
+            const userId = req.userId;
+            const { id } = req.params;
 
+            const cls = await classesCollection.findOne({
+                _id: new ObjectId(id)
+            });
 
+            if (!cls) {
+                return res.status(404).json({
+                    message: "Class not found"
+                });
+            }
+
+            if (cls.trainerId !== userId) {
+                return res.status(403).json({
+                    message: "forbidden"
+                });
+            }
+
+            const classData = await classesCollection.updateOne(
+                { _id: new ObjectId(id) },
+                { $set: req.body }
+            );
+
+            res.json(classData);
+            console.log(classData.matchedCount);
+            console.log(classData.modifiedCount);
+        });
 
         // ADMIN APIS
 
