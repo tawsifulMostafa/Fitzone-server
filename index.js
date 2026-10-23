@@ -57,14 +57,16 @@ async function connectToMongoDB() {
         //!  verify Role
 
 
-        const verifyRole = (role) => {
+        const verifyRole = (...roles) => {
             return async (req, res, next) => {
                 const userId = await getUserId(req);
+
                 if (!userId) {
                     return res.status(401).json({
                         message: "unauthorized"
-                    })
+                    });
                 }
+
                 const user = await userCollection.findOne(
                     { _id: new ObjectId(userId) },
                     {
@@ -72,16 +74,18 @@ async function connectToMongoDB() {
                             role: 1
                         }
                     }
-                )
-                if (!user || user.role !== role) {
+                );
+
+                if (!user || !roles.includes(user.role)) {
                     return res.status(403).json({
                         message: "Forbidden"
-                    })
+                    });
                 }
+
                 req.userId = userId;
-                next()
-            }
-        }
+                next();
+            };
+        };
 
         // * PUBLIC APIS
 
@@ -101,40 +105,32 @@ async function connectToMongoDB() {
             res.send(classes)
 
         })
-        app.get("/api/class/:classId", async (req, res) => {
-            const { classId } = req.params;
-            const userId = await getUserId(req);
-
-            const classData = await classesCollection.findOne({
-                _id: new ObjectId(classId)
-            });
-            if (!classData) {
-                return res.status(404).json({
-                    message: "Class not found"
-                });
-            }
-
-            //! Approved classes are public
-
-
-            if (classData.status === "approved") {
+       app.get("/api/class/:classId" , async(req , res) => {
+        const {classId } = req.params;
+        const userId = await getUserId(req)
+        if(!userId){
+            return res.status(401).json({
+                message : "unauthorized"
+            })
+        }
+        const data =  await classesCollection.findOne({
+            _id : new ObjectId(classId)
+        })
+        const user = await userCollection.findOne({
+            _id : new ObjectId(data.trainerId)
+        })
+        const currentUser = await userCollection.findOne({
+            _id  : new ObjectId(userId)
+        })
+        const classData = {
+            ...data , 
+            trainerName : user?.name 
+        }
+        if (classData.status === "approved") {
                 return res.json(classData);
             }
-
-            // Non-approved classes require authentication
-            if (!userId) {
-                return res.status(403).json({
-                    message: "Forbidden"
-                });
-            }
-
-            const user = await userCollection.findOne({
-                _id: new ObjectId(userId)
-            });
-
-            // Trainer can view their own class
             if (
-                user?.role === "trainer" &&
+                currentUser?.role === "trainer" &&
                 classData.trainerId === userId
 
             ) {
@@ -142,14 +138,16 @@ async function connectToMongoDB() {
             }
 
             // Admin can review non-approved classes
-            if (user?.role === "admin") {
+            if (currentUser?.role === "admin") {
                 return res.json(classData);
-            }
-
+            } 
             return res.status(403).json({
                 message: "Forbidden"
             });
-        });
+       })
+            
+
+         
 
 
         app.post("/api/checkout", async (req, res) => {
@@ -500,30 +498,38 @@ async function connectToMongoDB() {
 
         // TRAINER APIS
 
+        // app.get()
+
         // * add forum post
 
-         app.post("/api/forum/post" ,verifyRole("trainer") ,  async(req , res) => {
-            const trainerId = req.userId;
-            const forumData = req.body 
+        app.post("/api/forum/post", verifyRole("trainer", "admin"), async (req, res) => {
+            const userId = req.userId;
+            console.log(userId)
+            const forumData = req.body
             const user = await userCollection.findOne({
-                _id : new ObjectId(trainerId)
+                _id: new ObjectId(userId)
             })
-            const result  = await postForumCollection.insertOne({
-                ...forumData ,
-                trainerName : user.name , 
-                trainerId  
+            console.log(user);
+            const result = await postForumCollection.insertOne({
+                ...forumData,
+                trainerName: user.name,
+                userId
             })
+            console.log(result);
             res.json(result)
-         })
+        })
 
-          
-        app.get("/api/my/class", verifyRole("trainer" || "admin"), async (req, res) => {
+
+
+
+        app.get("/api/my/class", verifyRole("trainer"), async (req, res) => {
             const trainerId = req.userId;
             if (!trainerId) {
                 return res.status(401).json({
                     message: "unauthorized"
                 })
-            } 
+            }
+
             const result = await classesCollection.find({
                 trainerId,
             }).toArray();
