@@ -179,7 +179,7 @@ async function connectToMongoDB() {
                             price_data: {
                                 currency: "usd",
                                 product_data: {
-                                    name: cls.className,
+                                    name: cls.name,
                                     description: `Trainer: ${cls.trainerName}`,
                                     images: cls.image ? [cls.image] : [],
                                 },
@@ -449,8 +449,7 @@ async function connectToMongoDB() {
                     return res.status(404).json({ message: "Class Not Found" })
                 }
 
-
-
+ 
 
                 const result = await userFavoriteCollection.insertOne({
                     userId,
@@ -498,7 +497,36 @@ async function connectToMongoDB() {
 
         // TRAINER APIS
         //* get Forum post 
+     app.get("/api/get/forum" , async(req , res)=> {
+        const result = await postForumCollection.find({}).toArray() 
+        res.json(result)
+     })
 
+     app.get("/api/forum/:id" , async(req , res) => {
+        const id =  req.params
+        const userId = await getUserId(req)
+        if(!userId){
+            return res.status(401).json({
+                message : "unauthorized"
+            })
+        }  
+        const forums = await postForumCollection.findOne({
+        _id : new ObjectId(id)
+        })
+        if(!forums){
+            return res.status(404).json({
+                message : "forum post not available"
+            })
+        }
+        const poster = await userCollection.findOne({
+            _id : new ObjectId(forums.posterId)
+        })  
+        const forum = {
+             ...forums , 
+             poster
+        }  
+        res.json(forum)
+     })
 
 
         // * add forum post
@@ -512,9 +540,8 @@ async function connectToMongoDB() {
             })
             console.log(user);
             const result = await postForumCollection.insertOne({
-                ...forumData,
-                trainerName: user.name,
-                userId
+                ...forumData,        
+                posterId :userId 
             })
             console.log(result);
             res.json(result)
@@ -532,7 +559,7 @@ async function connectToMongoDB() {
                 trainerId,
             }).toArray();
             if (result.length === 0) {
-                return res.status(404).json({ message: "No Class Found" });
+                return res.status(404).json([ ]);
             }
             return res.json(result);
         });
@@ -549,6 +576,7 @@ async function connectToMongoDB() {
                     ...classData,
                     trainerId: userId,
                     status: "pending",
+                    bookingCount :  0 ,
                     createdAt: new Date()
                 }
                 const result = await classesCollection.insertOne(data)
@@ -562,7 +590,7 @@ async function connectToMongoDB() {
             }
         })
         // ** Edit Class
-        app.patch("/api/edit/class/:id", verifyRole("trainer"),  async (req, res) => {
+        app.patch("/api/edit/class/:id", verifyRole("trainer"), async (req, res) => {
             const userId = req.userId;
             const { id } = req.params;
 
@@ -588,9 +616,30 @@ async function connectToMongoDB() {
             );
 
             res.json(classData);
-            console.log(classData.matchedCount);
-            console.log(classData.modifiedCount);
         });
+        //! Delete class
+        app.delete("/api/class/delete/:id", verifyRole("trainer"),  async (req, res) => {
+            const userId = req.userId
+            const { id } = req.params
+            const cls = await classesCollection.findOne({
+                _id: new ObjectId(id)
+            })
+            if (!cls) {
+                return res.status(404).json({
+                    message: "Class not found"
+                });
+            }
+
+            if (cls.trainerId !== userId) {
+                return res.status(403).json({
+                    message: "forbidden"
+                });
+            }
+            const classData = await classesCollection.deleteOne({
+                _id: new ObjectId(id)
+            })
+            res.json(classData) 
+        })
 
         // ADMIN APIS
 
