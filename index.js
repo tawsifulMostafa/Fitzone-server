@@ -40,6 +40,8 @@ async function connectToMongoDB() {
         const userFavoriteCollection = db.collection("favorite")
         const applicationCollection = db.collection("application")
         const postForumCollection = db.collection("forum")
+
+
         const getUserId = async (req) => {
             const auth = req.headers.authorization || '';
             if (!auth.toLowerCase().startsWith("bearer "))
@@ -50,7 +52,7 @@ async function connectToMongoDB() {
                     $gt: new Date()
                 },
             })
-            console.log(auth)
+            console.log(session.userId.toString())
 
             return session ? session.userId.toString() : null;
         }
@@ -449,7 +451,7 @@ async function connectToMongoDB() {
                     return res.status(404).json({ message: "Class Not Found" })
                 }
 
- 
+
 
                 const result = await userFavoriteCollection.insertOne({
                     userId,
@@ -497,37 +499,116 @@ async function connectToMongoDB() {
 
         // TRAINER APIS
         //* get Forum post 
-     app.get("/api/get/forum" , async(req , res)=> {
-        const result = await postForumCollection.find({}).toArray() 
-        res.json(result)
-     })
-
-     app.get("/api/forum/:id" , async(req , res) => {
-        const id =  req.params
-        const userId = await getUserId(req)
-        if(!userId){
-            return res.status(401).json({
-                message : "unauthorized"
-            })
-        }  
-        const forums = await postForumCollection.findOne({
-        _id : new ObjectId(id)
+        app.get("/api/get/forum", async (req, res) => {
+            const result = await postForumCollection.find({}).toArray()
+            res.json(result)
         })
-        if(!forums){
-            return res.status(404).json({
-                message : "forum post not available"
-            })
-        }
-        const poster = await userCollection.findOne({
-            _id : new ObjectId(forums.posterId)
-        })  
-        const forum = {
-             ...forums , 
-             poster
-        }  
-        res.json(forum)
-     })
 
+        // forum details
+
+        app.get("/api/forum/:id", async (req, res) => {
+            const { id } = req.params
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+            const forums = await postForumCollection.findOne({
+                _id: new ObjectId(id)
+            })
+            if (!forums) {
+                return res.status(404).json({
+                    message: "forum post not available"
+                })
+            }
+            const poster = await userCollection.findOne({
+                _id: new ObjectId(forums.posterId)
+            })
+            const userLiked = forums.likes?.includes(userId) || false;
+            const userDisliked = forums.dislikes?.includes(userId) || false;
+            const { likes, dislikes, ...forumData } = forums
+            const forum = {
+                ...forumData,
+                poster,
+                likeCount: likes?.length || 0,
+                dislikeCount: dislikes?.length || 0,
+                userLiked,
+                userDisliked
+            };
+
+            res.json(forum)
+        })
+
+
+
+        // * forum like dislike control
+
+        app.post("/api/post/forum/reaction/:forumId", async (req, res) => {
+            const { forumId } = req.params;
+            console.log("forumId", forumId);
+            console.log("forumId:", req.params.forumId);
+            console.log("isValid:", ObjectId.isValid(req.params.forumId));
+            if (!ObjectId.isValid(forumId)) {
+                return res.status(400).json({
+                    message: "Invalid forum ID"
+                });
+            }
+            console.log(forumId);
+            const { reaction } = req.body
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+            const post = await postForumCollection.findOne({
+                _id: new ObjectId(forumId)
+            })
+            console.log(post);
+            if (!post) {
+                return res.status(404).json({
+                    message: "post not found"
+                })
+            }
+            const currentReaction = reaction === "like" ? "likes" : "dislikes";
+            const oppositeReaction = reaction === "like" ? "dislikes" : "likes";
+
+            if (!["like", "dislike"].includes(reaction)) {
+                return res.status(400).json({
+                    message: "Invalid reaction"
+                });
+            };
+
+            if (post[currentReaction].includes(userId)) {
+                await postForumCollection.updateOne({
+                    _id: new ObjectId(forumId)
+                },
+                    {
+                        $pull: {
+                            [currentReaction]: userId
+                        }
+                    })
+            } else {
+                await postForumCollection.updateOne(
+                    {
+                        _id: new ObjectId(forumId)
+                    },
+                    {
+                        $addToSet: {
+                            [currentReaction]: userId
+                        },
+                        $pull: {
+                            [oppositeReaction]: userId
+                        }
+                    }
+                );
+
+            }
+            return res.status(200).json({
+                message: "reaction updated"
+            })
+        });
 
         // * add forum post
 
@@ -540,10 +621,20 @@ async function connectToMongoDB() {
             })
             console.log(user);
             const result = await postForumCollection.insertOne({
-                ...forumData,        
-                posterId :userId 
+                ...forumData,
+                posterId: userId,
+                likes: [],
+                dislikes: []
             })
-            console.log(result);
+            await postForumCollection.updateMany(
+                { likes: { $exists: false } },
+                { $set: { likes: [] } }
+            );
+
+            await postForumCollection.updateMany(
+                { dislikes: { $exists: false } },
+                { $set: { dislikes: [] } }
+            );
             res.json(result)
         })
 
@@ -559,7 +650,7 @@ async function connectToMongoDB() {
                 trainerId,
             }).toArray();
             if (result.length === 0) {
-                return res.status(404).json([ ]);
+                return res.status(404).json([]);
             }
             return res.json(result);
         });
@@ -576,7 +667,7 @@ async function connectToMongoDB() {
                     ...classData,
                     trainerId: userId,
                     status: "pending",
-                    bookingCount :  0 ,
+                    bookingCount: 0,
                     createdAt: new Date()
                 }
                 const result = await classesCollection.insertOne(data)
@@ -618,7 +709,7 @@ async function connectToMongoDB() {
             res.json(classData);
         });
         //! Delete class
-        app.delete("/api/class/delete/:id", verifyRole("trainer"),  async (req, res) => {
+        app.delete("/api/class/delete/:id", verifyRole("trainer"), async (req, res) => {
             const userId = req.userId
             const { id } = req.params
             const cls = await classesCollection.findOne({
@@ -638,7 +729,7 @@ async function connectToMongoDB() {
             const classData = await classesCollection.deleteOne({
                 _id: new ObjectId(id)
             })
-            res.json(classData) 
+            res.json(classData)
         })
 
         // ADMIN APIS
