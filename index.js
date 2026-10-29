@@ -40,6 +40,7 @@ async function connectToMongoDB() {
         const userFavoriteCollection = db.collection("favorite")
         const applicationCollection = db.collection("application")
         const postForumCollection = db.collection("forum")
+        const forumCommentCollection = db.collection("comments")
 
 
         const getUserId = async (req) => {
@@ -540,7 +541,31 @@ async function connectToMongoDB() {
             res.json(forum)
         })
 
+        // * Comment for forum 
 
+        app.post("/api/post/forum/comment/:forumId", async (req, res) => {
+            const userId = await getUserId(req)
+            console.log(userId);
+            if (!userId) {
+                return res.status(401).json({
+                    message: "authorized"
+                })
+            }
+            const { forumId } = req.params;
+            const { newComment } = req.body;
+            const forum = await forumCommentCollection.insertOne({
+                ...newComment,
+                commentedBy: userId,
+                forumId,
+                parentCommentId: newComment.parentCommentId
+                    ? new ObjectId(newComment.parentCommentId)
+                    : null,
+                createdAt: new Date(),
+            })
+            console.log(forum);
+            res.json(forum)
+        })
+        //get comment
 
         // * forum like dislike control
 
