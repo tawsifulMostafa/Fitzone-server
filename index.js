@@ -540,6 +540,23 @@ async function connectToMongoDB() {
 
             res.json(forum)
         })
+        //! delete comment
+        app.delete("/api/post/forum/comment/delete/:commentId", async (req, res) => {
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+
+            const { commentId } = req.params;
+            const result = await forumCommentCollection.deleteOne({
+                commentedBy: userId,
+                _id: new ObjectId(commentId)
+            })
+            console.log(result);
+            res.json(result)
+        })
         // * edit comments
         app.patch("/api/post/forum/comment/edit/:commentId", async (req, res) => {
             const { commentId } = req.params
@@ -554,7 +571,7 @@ async function connectToMongoDB() {
             const result = await forumCommentCollection.updateOne({
                 commentedBy: userId,
                 _id: new ObjectId(commentId)
-            },{
+            }, {
                 $set: {
                     Comment: updatedComment
                 }
@@ -582,6 +599,9 @@ async function connectToMongoDB() {
             const comments = await forumCommentCollection.find({
                 forumId
             }).toArray()
+            comments.sort((a, b) => {
+                return a.commentedBy === userId ? -1 : 1;
+            });
             const result = []
             for (const comment of comments) {
                 const user = await userCollection.findOne({
