@@ -540,12 +540,67 @@ async function connectToMongoDB() {
 
             res.json(forum)
         })
+        // * edit comments
+        app.patch("/api/post/forum/comment/edit/:commentId", async (req, res) => {
+            const { commentId } = req.params
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
 
+            const { updatedComment } = req.body
+            const result = await forumCommentCollection.updateOne({
+                commentedBy: userId,
+                _id: new ObjectId(commentId)
+            },{
+                $set: {
+                    Comment: updatedComment
+                }
+            });
+            if (!result.matchedCount) {
+                return res.status(404).json({
+                    message: "Comment not found or unauthorized"
+                });
+            }
+
+            res.json({
+                message: "Comment updated successfully"
+            });
+        });
+
+        // * get Comment 
+        app.get("/api/post/forum/comment/:forumId", async (req, res) => {
+            const { forumId } = req.params
+            const userId = await getUserId(req)
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })
+            }
+            const comments = await forumCommentCollection.find({
+                forumId
+            }).toArray()
+            const result = []
+            for (const comment of comments) {
+                const user = await userCollection.findOne({
+                    _id: new ObjectId(comment.commentedBy)
+                })
+                result.push({
+                    ...comment,
+                    userName: user.name,
+                    userImage: user.image,
+                    commentId: comment._id
+                })
+            }
+            res.json(result)
+
+        })
         // * Comment for forum 
 
         app.post("/api/post/forum/comment/:forumId", async (req, res) => {
             const userId = await getUserId(req)
-            console.log(userId);
             if (!userId) {
                 return res.status(401).json({
                     message: "authorized"
@@ -562,10 +617,8 @@ async function connectToMongoDB() {
                     : null,
                 createdAt: new Date(),
             })
-            console.log(forum);
             res.json(forum)
         })
-        //get comment
 
         // * forum like dislike control
 
@@ -709,7 +762,6 @@ async function connectToMongoDB() {
         app.patch("/api/edit/class/:id", verifyRole("trainer"), async (req, res) => {
             const userId = req.userId;
             const { id } = req.params;
-
             const cls = await classesCollection.findOne({
                 _id: new ObjectId(id)
             });
