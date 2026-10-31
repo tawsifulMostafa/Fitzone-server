@@ -497,8 +497,40 @@ async function connectToMongoDB() {
                 res.status(500).json({ message: "Internal Server Error" })
             }
         })
-
+        // delete my-class for admin and trainer..!
+        app.delete("/api/post/forum/:forumId", verifyRole("admin", "trainer"), async (req, res) => {
+            const userId = req.userId
+            if (!userId) {
+                return res.status(403).json({
+                    message: "forbidden"
+                })
+            }
+            const { forumId } = req.params
+            const result = await postForumCollection.deleteOne({
+                posterId: userId,
+                _id: new ObjectId(forumId)
+            })
+            res.json(result)
+        })
         // TRAINER APIS
+        // my post for trainers admin as well
+        app.get("/api/forum/post", verifyRole('trainer', 'admin'), async (req, res) => {
+            const userId = req.userId
+            if (!userId) {
+                return res.status(403).json({
+                    message: "forbidden"
+                })
+            }
+            const result = await postForumCollection.find({
+                posterId: userId
+            }).toArray()
+
+            res.status(200).json(result, {
+                message: "post that you have posted"
+            })
+        })
+
+
         //* get Forum post 
         app.get("/api/get/forum", async (req, res) => {
             const result = await postForumCollection.find({}).toArray()
@@ -540,6 +572,8 @@ async function connectToMongoDB() {
 
             res.json(forum)
         })
+        // * reply comment
+
         //! delete comment
         app.delete("/api/post/forum/comment/delete/:commentId", async (req, res) => {
             const userId = await getUserId(req)
@@ -597,7 +631,7 @@ async function connectToMongoDB() {
                 })
             }
             const comments = await forumCommentCollection.find({
-                forumId
+                forumId,
             }).toArray()
             comments.sort((a, b) => {
                 return a.commentedBy === userId ? -1 : 1;
@@ -620,26 +654,29 @@ async function connectToMongoDB() {
         // * Comment for forum 
 
         app.post("/api/post/forum/comment/:forumId", async (req, res) => {
-            const userId = await getUserId(req)
+            const userId = await getUserId(req);
+
             if (!userId) {
                 return res.status(401).json({
-                    message: "authorized"
-                })
+                    message: "unauthorized"
+                });
             }
+
             const { forumId } = req.params;
-            const { newComment } = req.body;
+            const { newComment, parentCommentId } = req.body;
+
             const forum = await forumCommentCollection.insertOne({
                 ...newComment,
                 commentedBy: userId,
                 forumId,
-                parentCommentId: newComment.parentCommentId
-                    ? new ObjectId(newComment.parentCommentId)
+                parentCommentId: parentCommentId
+                    ? new ObjectId(parentCommentId)
                     : null,
                 createdAt: new Date(),
-            })
-            res.json(forum)
-        })
+            });
 
+            res.json(forum);
+        });
         // * forum like dislike control
 
         app.post("/api/post/forum/reaction/:forumId", async (req, res) => {
