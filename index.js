@@ -59,7 +59,6 @@ async function connectToMongoDB() {
         }
         //!  verify Role
 
-
         const verifyRole = (...roles) => {
             return async (req, res, next) => {
                 const userId = await getUserId(req);
@@ -203,7 +202,6 @@ async function connectToMongoDB() {
 
                 res.send({ url: session.url })
             } catch (error) {
-                console.error("Error creating checkout session:", error);
                 res.status(500).json({ error: "Internal Server Error" });
             }
         })
@@ -216,7 +214,6 @@ async function connectToMongoDB() {
                     process.env.STRIPE_WEBHOOK_SECRET
                 )
             } catch (err) {
-                console.error("Webhook signature error:", err.message)
                 return res.status(400).send(`Webhook Error: ${err.message}`)
             }
 
@@ -248,7 +245,6 @@ async function connectToMongoDB() {
         app.get("/api/bookings/check/:classId", async (req, res) => {
             try {
                 const userId = await getUserId(req)
-                console.log(userId)
                 if (!userId) {
                     return res.status(401).json({
                         message: "unauthorized"
@@ -263,7 +259,6 @@ async function connectToMongoDB() {
                 })
                 res.json(booking)
             } catch (err) {
-                console.error(err)
                 res.status(500).json({ message: "Internal Server Error" })
             }
         })
@@ -588,7 +583,6 @@ async function connectToMongoDB() {
                 commentedBy: userId,
                 _id: new ObjectId(commentId)
             })
-            console.log(result);
             res.json(result)
         })
         // * edit comments
@@ -681,15 +675,11 @@ async function connectToMongoDB() {
 
         app.post("/api/post/forum/reaction/:forumId", async (req, res) => {
             const { forumId } = req.params;
-            console.log("forumId", forumId);
-            console.log("forumId:", req.params.forumId);
-            console.log("isValid:", ObjectId.isValid(req.params.forumId));
             if (!ObjectId.isValid(forumId)) {
                 return res.status(400).json({
                     message: "Invalid forum ID"
                 });
             }
-            console.log(forumId);
             const { reaction } = req.body
             const userId = await getUserId(req)
             if (!userId) {
@@ -700,7 +690,6 @@ async function connectToMongoDB() {
             const post = await postForumCollection.findOne({
                 _id: new ObjectId(forumId)
             })
-            console.log(post);
             if (!post) {
                 return res.status(404).json({
                     message: "post not found"
@@ -749,12 +738,10 @@ async function connectToMongoDB() {
 
         app.post("/api/forum/post", verifyRole("trainer", "admin"), async (req, res) => {
             const userId = req.userId;
-            console.log(userId)
             const forumData = req.body
             const user = await userCollection.findOne({
                 _id: new ObjectId(userId)
             })
-            console.log(user);
             const result = await postForumCollection.insertOne({
                 ...forumData,
                 posterId: userId,
@@ -867,6 +854,16 @@ async function connectToMongoDB() {
         })
 
         // ADMIN APIS
+        app.get("/api/all/users", verifyRole("admin"), async (req, res) => {
+            const userId = req.userId
+            if (!userId) {
+                return res.status(401).json({
+                    message: "unauthorized"
+                })  
+            }
+            const result = await userCollection.find().toArray()
+            res.send(result)
+        })
 
         console.log("You successfully connected to MongoDB");
         return client;
@@ -878,6 +875,4 @@ async function connectToMongoDB() {
 connectToMongoDB()
 app.listen(port, () => {
     console.log("PORT:", port);
-    console.log("HOST:", require("os").hostname());
-    console.log(`Example app listening on port ${port}`);
 });
