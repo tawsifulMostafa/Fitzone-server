@@ -89,7 +89,40 @@ async function connectToMongoDB() {
                 next();
             };
         };
+        //! verify users status
 
+        const verifyStatus = () => {
+            return async (req, res, next) => {
+                const userId = await getUserId(req)
+
+                if (!userId) {
+                    return res.status(401).json({
+                        message: "unauthorized"
+                    })
+                }
+
+                const user = await userCollection.findOne({
+                    _id: new ObjectId(userId)
+                }, {
+                    projection: { status: 1 }
+                })
+
+                if (!user) {
+                    return res.status(403).json({
+                        message: "forbidden"
+                    })
+                }
+
+                if (user.status !== "active") {
+                    return res.status(403).json({
+                        message: "Action restricted by Admin"
+                    })
+                }
+
+                req.userId = userId
+                next()
+            }
+        }
         // * PUBLIC APIS
 
         // * only approved classes will be shown in the featured classes section
@@ -153,7 +186,7 @@ async function connectToMongoDB() {
 
 
 
-        app.post("/api/checkout", async (req, res) => {
+        app.post("/api/checkout", verifyStatus(), async (req, res) => {
             try {
                 const { classId } = req.body
                 const userId = await getUserId(req)
@@ -323,7 +356,7 @@ async function connectToMongoDB() {
             { userId: 1 },
             { unique: true }
         );
-        app.post("/api/apply/trainer", async (req, res) => {
+        app.post("/api/apply/trainer", verifyStatus(), async (req, res) => {
             try {
                 const application = req.body
                 const userId = await getUserId(req)
@@ -648,7 +681,7 @@ async function connectToMongoDB() {
         })
         // * Comment for forum 
 
-        app.post("/api/post/forum/comment/:forumId", async (req, res) => {
+        app.post("/api/post/forum/comment/:forumId", verifyStatus(), async (req, res) => {
             const userId = await getUserId(req);
 
             if (!userId) {
@@ -674,7 +707,7 @@ async function connectToMongoDB() {
         });
         // * forum like dislike control
 
-        app.post("/api/post/forum/reaction/:forumId", async (req, res) => {
+        app.post("/api/post/forum/reaction/:forumId", verifyStatus(), async (req, res) => {
             const { forumId } = req.params;
             if (!ObjectId.isValid(forumId)) {
                 return res.status(400).json({
@@ -731,7 +764,7 @@ async function connectToMongoDB() {
 
             }
             return res.status(200).json({
-                message: "reaction updated"
+                response: "reaction updated"
             })
         });
 
@@ -748,16 +781,7 @@ async function connectToMongoDB() {
                 posterId: userId,
                 likes: [],
                 dislikes: []
-            })
-            await postForumCollection.updateMany(
-                { likes: { $exists: false } },
-                { $set: { likes: [] } }
-            );
-
-            await postForumCollection.updateMany(
-                { dislikes: { $exists: false } },
-                { $set: { dislikes: [] } }
-            );
+            }) 
             res.json(result)
         })
 
