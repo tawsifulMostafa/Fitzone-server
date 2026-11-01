@@ -59,6 +59,7 @@ async function connectToMongoDB() {
         }
         //!  verify Role
 
+
         const verifyRole = (...roles) => {
             return async (req, res, next) => {
                 const userId = await getUserId(req);
@@ -854,12 +855,51 @@ async function connectToMongoDB() {
         })
 
         // ADMIN APIS
+
+
+        //!    Block users
+        app.patch("/api/user/status/:userId", verifyRole("admin"), async (req, res) => {
+            const { userId } = req.params
+
+            const user = await userCollection.findOne({
+                _id: new ObjectId(userId)
+            })
+
+            if (!user) {
+                return res.status(404).json({ message: "User not found" })
+            }
+
+            const status = user.status === "blocked" ? "active" : "blocked"
+
+            const result = await userCollection.updateOne(
+                { _id: new ObjectId(userId) },
+                { $set: { status } }
+            )
+            res.send(result)
+        })
+        app.patch("/api/user/role/:userId", verifyRole("admin"), async (req, res) => {
+            const { userId } = req.params;
+            const { newRole } = req.body
+            if (!userId) {
+                return res.status(404).json({
+                    message: "user not found"
+                })
+            }
+            const result = await userCollection.updateOne({
+                _id: new ObjectId(userId)
+            }, {
+                $set: { role: "admin" }
+            })
+            res.json(result)
+        })
+
+
         app.get("/api/all/users", verifyRole("admin"), async (req, res) => {
             const userId = req.userId
             if (!userId) {
                 return res.status(401).json({
                     message: "unauthorized"
-                })  
+                })
             }
             const result = await userCollection.find().toArray()
             res.send(result)
