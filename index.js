@@ -182,6 +182,68 @@ async function connectToMongoDB() {
             });
         })
 
+        // Only pending classes
+        app.get("/api/pending/classes", verifyRole("admin"), async (req, res) => {
+
+            const results = await classesCollection.find({ status: { $in: ["pending", "rejected"] } }).toArray()
+            const classes = []
+            for (const result of results) {
+                const trainer = await userCollection.findOne({
+                    _id: new ObjectId(result.trainerId)
+                })
+                classes.push({
+                    ...result,
+                    trainerName: trainer.name
+                })
+            }
+            res.json(classes)
+        })
+
+        //approve class by admin 
+
+        app.patch("/api/status/class/:classId", verifyRole("admin"), async (req, res) => {
+            const { classId } = req.params;
+            const { newStatus } = req.body;
+
+            if (!["approved", "rejected", "delete"].includes(newStatus)) {
+                return res.status(400).json({
+                    message: "Invalid status"
+                });
+            }
+
+            if (newStatus === "delete") {
+                const result = await classesCollection.deleteOne({
+                    _id: new ObjectId(classId)
+                });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).json({
+                        message: "Class not found"
+                    });
+                }
+
+                return res.status(200).json({
+                    message: "Class deleted successfully",
+                    deletedCount: result.deletedCount
+                });
+            }
+
+            const result = await classesCollection.updateOne(
+                { _id: new ObjectId(classId) },
+                { $set: { status: newStatus } }
+            );
+
+            if (result.matchedCount === 0) {
+                return res.status(404).json({
+                    message: "Class not found"
+                });
+            }
+
+            res.status(200).json({
+                message: `Status updated to ${newStatus}`,
+                modifiedCount: result.modifiedCount
+            });
+        });
 
 
 
@@ -781,7 +843,7 @@ async function connectToMongoDB() {
                 posterId: userId,
                 likes: [],
                 dislikes: []
-            }) 
+            })
             res.json(result)
         })
 
