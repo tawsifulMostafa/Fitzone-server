@@ -31,7 +31,7 @@ const client = new MongoClient(process.env.MONGODB_URI);
 async function connectToMongoDB() {
 
     try {
-        await client.connect();
+        // await client.connect();
         const db = client.db("FitZone");
         const sessionCollection = db.collection("session")
         const userCollection = db.collection("user")
@@ -41,6 +41,7 @@ async function connectToMongoDB() {
         const applicationCollection = db.collection("application")
         const postForumCollection = db.collection("forum")
         const forumCommentCollection = db.collection("comments")
+
 
 
         const getUserId = async (req) => {
@@ -263,7 +264,7 @@ async function connectToMongoDB() {
                 }
                 const order = await paymentCollection.insertOne({
                     classId: cls._id,
-                    className: cls.className,
+                    className: cls.name,
                     amount: cls.price,
                     status: "pending",
                     createdAt: new Date(),
@@ -941,7 +942,73 @@ async function connectToMongoDB() {
         })
 
         // ADMIN APIS
+        // get application by admin
 
+        app.get("/api/applications", verifyRole("admin"), async (req, res) => {
+            const results = await applicationCollection.find({ status: "pending" }).toArray()
+            if (!results) {
+                return res.status(404).json({ message: "No applications Found" })
+            }
+            const application = [];
+            for (const result of results) {
+                const applier = await userCollection.findOne({ _id: new ObjectId(result.userId) })
+                application.push({
+                    applicantEmail: applier.email,
+                    applicantName: applier.name,
+                    applicantImage: applier.image,
+                    ...result
+                })
+            }
+            res.json(application)
+        })
+
+        // application feedback and approve or reject
+
+        app.patch("/api/review/application/:applicationId", verifyRole("admin"), async (req, res) => {
+            const { applicationId } = req.params;
+            const { status, adminFeedback } = req.body;
+
+            if (!ObjectId.isValid(applicationId)) {
+                return res.status(400).json({ message: "Invalid application ID" });
+            }
+
+            if (!["approved", "rejected"].includes(status)) {
+                return res.status(400).json({ message: "Invalid status" });
+            }
+
+            const application = await applicationCollection.findOne({
+                _id: new ObjectId(applicationId)
+            });
+
+            if (!application) {
+                return res.status(404).json({ message: "Application not found" });
+            }
+
+            if (application.status !== "pending") {
+                return res.status(400).json({ message: "Application already reviewed" });
+            }
+
+            if (status === "approved") {
+                await userCollection.updateOne(
+                    { _id: new ObjectId(application.userId) },
+                    { $set: { role: "trainer" } }
+                );
+            }
+
+            await applicationCollection.updateOne(
+                { _id: new ObjectId(applicationId) },
+                {
+                    $set: {
+                        status,
+                        adminFeedback
+                    }
+                }
+            );
+
+            res.status(200).json({
+                success: `Application ${status} successfully`
+            });
+        });
 
         //!    Block users
         app.patch("/api/user/status/:userId", verifyRole("admin"), async (req, res) => {
