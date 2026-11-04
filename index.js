@@ -41,9 +41,6 @@ const userFavoriteCollection = db.collection("favorite")
 const applicationCollection = db.collection("application")
 const postForumCollection = db.collection("forum")
 const forumCommentCollection = db.collection("comments")
-
-
-
 const getUserId = async (req) => {
     const auth = req.headers.authorization || '';
     if (!auth.toLowerCase().startsWith("bearer "))
@@ -137,8 +134,21 @@ app.get("/api/featured-classes", async (req, res) => {
 })
 
 app.get("/api/all-classes", async (req, res) => {
-    const classes = await classesCollection.find({ status: "approved" }).toArray()
-    res.send(classes)
+    const query = [];
+    const results = await classesCollection.find({ status: "approved" }).toArray()
+    for (const result of results) {
+        await classesCollection.findOne({
+            _id: new ObjectId(result._id)
+        })
+        query.push({
+            _id: result._id,
+            name: result.name,
+            image: result.image,
+            description: result.description,
+            price: result.price
+        })
+    }
+    res.send(query)
 })
 app.get("/api/class/:classId", async (req, res) => {
     const { classId } = req.params;
