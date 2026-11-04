@@ -142,12 +142,12 @@ async function connectToMongoDB() {
             for (const cls of classes) {
                 const data = await classesCollection.findOne({ _id: new ObjectId(cls._id) })
                 query.push({
-                    name: data.name,
-                    image: data.image,
-                    price: data.price,
-                    description: data.description,
-                    _id: data._id,
-                    category: data.category
+                    name: cls.name,
+                    image: cls.image,
+                    price: cls.price,
+                    description: cls.description,
+                    _id: cls._id,
+                    category: cls.category
                 })
             }
 
