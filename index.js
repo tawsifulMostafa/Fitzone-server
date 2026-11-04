@@ -31,7 +31,7 @@ const client = new MongoClient(process.env.MONGODB_URI);
 async function connectToMongoDB() {
 
     try {
-        // await client.connect();
+        await client.connect();
         const db = client.db("FitZone");
         const sessionCollection = db.collection("session")
         const userCollection = db.collection("user")
@@ -54,7 +54,6 @@ async function connectToMongoDB() {
                     $gt: new Date()
                 },
             })
-            console.log(session.userId.toString())
 
             return session ? session.userId.toString() : null;
         }
@@ -138,9 +137,23 @@ async function connectToMongoDB() {
         })
 
         app.get("/api/all-classes", async (req, res) => {
+            const query = [];
             const classes = await classesCollection.find({ status: "approved" }).toArray()
-            res.send(classes)
+            for (const cls of classes) {
+                const data = await classesCollection.findOne({ _id: new ObjectId(cls._id) })
+                query.push({
+                    name: data.name,
+                    image: data.image,
+                    price: data.price,
+                    description: data.description,
+                    _id: data._id,
+                    category: data.category
+                })
+            }
 
+
+
+            res.send(query)
         })
         app.get("/api/class/:classId", async (req, res) => {
             const { classId } = req.params;
@@ -441,7 +454,6 @@ async function connectToMongoDB() {
             } catch (error) {
                 res.status(409).json({ message: "already exists" })
             }
-
         })
 
         app.get("/api/apply/trainer", async (req, res) => {
@@ -453,8 +465,7 @@ async function connectToMongoDB() {
             }
 
             const result = await applicationCollection.findOne({
-                userId,
-                status: "pending"
+                userId
             })
             res.json(result)
         })
@@ -1041,9 +1052,25 @@ async function connectToMongoDB() {
             const result = await userCollection.updateOne({
                 _id: new ObjectId(userId)
             }, {
-                $set: { role: "admin" }
+                $set: { role: newRole }
             })
             res.json(result)
+        })
+        // manage trainers by admin 
+        app.get("/api/manage/trainers", verifyRole("admin"), async (req, res) => {
+            const trainers = await userCollection.find({ role: "trainer" }).toArray()
+            res.send(trainers)
+        })
+        app.patch("/api/demote/trainer/:trainerId", verifyRole("admin"), async (req, res) => {
+            const { trainerId } = req.params;
+            console.log(trainerId, "trainerId");
+            if (!trainerId) {
+                res.status(401).json({ message: "unauthorized" })
+            }
+            const updateRole = await userCollection.updateOne({
+                _id: new ObjectId(trainerId)
+            }, { $set: { role: "member" } })
+            res.json(updateRole)
         })
 
 
@@ -1058,7 +1085,6 @@ async function connectToMongoDB() {
             res.send(result)
         })
 
-        console.log("You successfully connected to MongoDB");
         return client;
     } catch (err) {
         console.dir(err);
