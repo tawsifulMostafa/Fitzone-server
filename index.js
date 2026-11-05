@@ -33,9 +33,11 @@ const client = new MongoClient(uri, {
     }
 })
 
-client.connect(() => {
-    console.log('connecting to MOngo db');
-}).catch(console.dir)
+const clientPromise = client.connect();
+
+clientPromise
+    .then(() => console.log("MongoDB connected"))
+    .catch((error) => console.error("MongoDB connection failed:", error));
 
 const db = client.db("FitZone");
 const sessionCollection = db.collection("session")
@@ -46,6 +48,19 @@ const userFavoriteCollection = db.collection("favorite")
 const applicationCollection = db.collection("application")
 const postForumCollection = db.collection("forum")
 const forumCommentCollection = db.collection("comments")
+
+app.use(async (req, res, next) => {
+    try {
+        await clientPromise;
+        next();
+    } catch (error) {
+        console.error("Database connection error:", error);
+        res.status(500).json({
+            message: "Database connection failed"
+        });
+    }
+});
+
 const getUserId = async (req) => {
     const auth = req.headers.authorization || '';
     if (!auth.toLowerCase().startsWith("bearer "))
@@ -139,22 +154,26 @@ app.get("/api/featured-classes", async (req, res) => {
 })
 
 app.get("/api/all-classes", async (req, res) => {
-    const query = [];
-    const results = await classesCollection.find({ status: "approved" }).toArray()
-    for (const result of results) {
-        await classesCollection.findOne({
-            _id: new ObjectId(result._id)
-        })
-        query.push({
+    try {
+        const results = await classesCollection.find({
+            status: "approved"
+        }).toArray();
+
+        const query = results.map((result) => ({
             _id: result._id,
             name: result.name,
             image: result.image,
             description: result.description,
             price: result.price
-        })
+        }));
+
+        res.send(query);
+
+    } catch (error) {
+        console.error("ALL CLASSES ERROR:", error);
+        res.status(500).json({ message: "Failed to fetch classes" });
     }
-    res.send(query)
-})
+});
 app.get("/api/class/:classId", async (req, res) => {
     const { classId } = req.params;
     const userId = await getUserId(req)
