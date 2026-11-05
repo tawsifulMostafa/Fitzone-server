@@ -1,5 +1,5 @@
 const express = require('express');
-const { MongoClient, ObjectId } = require('mongodb');
+const { MongoClient, ObjectId, ServerApiVersion } = require('mongodb');
 const cors = require("cors")
 const app = express();
 require("dotenv").config()
@@ -9,8 +9,6 @@ app.use(cors({
     credentials: true,
 }))
 const port = process.env.NEXT_PUBLIC_SERVER_PORT || 8008;
-
-
 
 app.use((req, res, next) => {
     if (req.originalUrl === "/api/webhook") {
@@ -26,7 +24,14 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
-const client = new MongoClient(process.env.MONGODB_URI);
+const uri = process.env.MONGODB_URI
+const client = new MongoClient(uri, {
+    serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+    }
+})
 
 client.connect(() => {
     console.log('connecting to MOngo db');
@@ -1086,6 +1091,5 @@ app.listen(port, () => {
     console.log("PORT:", port);
 });
 
-console.log("You successfully connected to MongoDB");
-return client;
+module.exports = app;
 
