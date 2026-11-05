@@ -202,7 +202,7 @@ app.get("/api/class/:classId", async (req, res) => {
 // Only pending classes
 app.get("/api/pending/classes", verifyRole("admin"), async (req, res) => {
 
-    const results = await classesCollection.find({ status: { $in: ["pending", "rejected"] } }).toArray()
+    const results = await classesCollection.find().toArray()
     const classes = []
     for (const result of results) {
         const trainer = await userCollection.findOne({
@@ -476,7 +476,7 @@ app.get("/api/apply/trainer", async (req, res) => {
 
 // FAVORITE APIS
 
-app.get("/api/dashboard/favorites/:classId", async (req, res) => {
+app.get("/api/dashboard/favorites", async (req, res) => {
     const userId = await getUserId(req)
     if (!userId) {
         return res.status(401).json({
@@ -957,6 +957,23 @@ app.delete("/api/class/delete/:id", verifyRole("trainer"), async (req, res) => {
 
 // ADMIN APIS
 // get application by admin
+app.get("/api/payments", verifyRole("admin"), async (req, res) => {
+    const payments = await paymentCollection.find({ status: "paid" }).toArray();
+
+    const result = [];
+
+    for (const payment of payments) {
+        const user = await userCollection.findOne({
+            _id: new ObjectId(payment.userId)
+        });
+
+        result.push({
+            ...payment,
+            userEmail: user?.email || "Unknown"
+        });
+    }
+    res.json(result);
+});
 
 app.get("/api/applications", verifyRole("admin"), async (req, res) => {
     const results = await applicationCollection.find({ status: "pending" }).toArray()
@@ -1003,21 +1020,30 @@ app.patch("/api/review/application/:applicationId", verifyRole("admin"), async (
     }
 
     if (status === "approved") {
-        await userCollection.updateOne(
+        const result = await userCollection.updateOne(
             { _id: new ObjectId(application.userId) },
             { $set: { role: "trainer" } }
         );
-    }
 
-    await applicationCollection.updateOne(
-        { _id: new ObjectId(applicationId) },
-        {
-            $set: {
-                status,
-                adminFeedback
-            }
+        if (!result.matchedCount) {
+            return res.status(404).json({ message: "User not found" });
         }
-    );
+
+        await applicationCollection.deleteOne({
+            _id: new ObjectId(applicationId)
+        });
+
+    } else {
+        await applicationCollection.updateOne(
+            { _id: new ObjectId(applicationId) },
+            {
+                $set: {
+                    status: "rejected",
+                    adminFeedback
+                }
+            }
+        );
+    }
 
     res.status(200).json({
         success: `Application ${status} successfully`
