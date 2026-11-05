@@ -30,15 +30,32 @@ const client = new MongoClient(uri, {
         version: ServerApiVersion.v1,
         strict: true,
         deprecationErrors: true,
+        serverSelectionTimeoutMS: 5000,
+        family: 4,
     }
 })
 
-const clientPromise = client.connect();
+let connecting = null;
 
-clientPromise
-    .then(() => console.log("MongoDB connected"))
-    .catch((error) => console.error("MongoDB connection failed:", error));
+const connectDB = () => {
+    if (!connecting) {
+        connecting = client.connect().catch((err) => {
+            connecting = null;
+            throw err;
+        });
+    }
+    return connecting;
+};
 
+app.use(async (req, res, next) => {
+    try {
+        await connectDB();
+        next();
+    } catch (error) {
+        console.error("Database connection error:", error.message);
+        res.status(500).json({ message: "Database connection failed" });
+    }
+});
 const db = client.db("FitZone");
 const sessionCollection = db.collection("session")
 const userCollection = db.collection("user")
@@ -289,7 +306,7 @@ app.post("/api/checkout", verifyStatus(), async (req, res) => {
         const { classId } = req.body
         const userId = await getUserId(req)
         if (!userId)
-            return req.status(401).json({ error: "please sign in" })
+            return res.status(401).json({ error: "please sign in" })
         const cls = await classesCollection.findOne({ _id: new ObjectId(classId) })
         if (!cls) {
             return res.status(404).json({ error: "Class not found" });
