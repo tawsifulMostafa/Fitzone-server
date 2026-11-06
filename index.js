@@ -41,7 +41,10 @@ const client = new MongoClient(uri, {
 });
 
 attachDatabasePool(client);
-
+client.on("serverHeartbeatFailed", (e) =>
+    console.error("HEARTBEAT FAILED:", e.failure?.message));
+client.on("connectionPoolCleared", () => console.error("POOL CLEARED"));
+client.on("topologyClosed", () => console.error("TOPOLOGY CLOSED"));
 app.use(async (req, res, next) => {
     try {
         await client.connect();
