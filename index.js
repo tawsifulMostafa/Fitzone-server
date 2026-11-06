@@ -1,11 +1,14 @@
 const express = require('express');
 const { MongoClient, ObjectId, ServerApiVersion } = require('mongodb');
 const cors = require("cors")
-const app = express();
+const { attachDatabasePool } = require("@vercel/functions");
 require("dotenv").config()
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
+
+const app = express();
+
 app.use(cors({
-    origin: "http://localhost:3000",
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
 }))
 const port = process.env.NEXT_PUBLIC_SERVER_PORT || 8008;
@@ -13,49 +16,42 @@ const port = process.env.NEXT_PUBLIC_SERVER_PORT || 8008;
 app.use((req, res, next) => {
     if (req.originalUrl === "/api/webhook") {
         next()
-
     } else {
         express.json()(req, res, next)
     }
 })
 
-
-
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
+
 const uri = process.env.MONGODB_URI
+
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
         strict: true,
         deprecationErrors: true,
-        serverSelectionTimeoutMS: 5000,
-        family: 4,
-    }
-})
+    },
+    maxPoolSize: 10,
+    minPoolSize: 0,
+    maxIdleTimeMS: 5000,
+    serverSelectionTimeoutMS: 5000,
+    family: 4,
+});
 
-let connecting = null;
-
-const connectDB = () => {
-    if (!connecting) {
-        connecting = client.connect().catch((err) => {
-            connecting = null;
-            throw err;
-        });
-    }
-    return connecting;
-};
+attachDatabasePool(client);
 
 app.use(async (req, res, next) => {
     try {
-        await connectDB();
+        await client.connect();
         next();
     } catch (error) {
         console.error("Database connection error:", error.message);
         res.status(500).json({ message: "Database connection failed" });
     }
 });
+
 const db = client.db("FitZone");
 const sessionCollection = db.collection("session")
 const userCollection = db.collection("user")
@@ -1148,6 +1144,11 @@ app.get("/api/all/users", verifyRole("admin"), async (req, res) => {
     const result = await userCollection.find().toArray()
     res.send(result)
 })
+app.use((err, req, res, next) => {
+    console.error("ROUTE ERROR:", err.message);
+    res.status(500).json({ message: "Internal Server Error" });
+});
+
 app.listen(port, () => {
     console.log("PORT:", port);
 });
