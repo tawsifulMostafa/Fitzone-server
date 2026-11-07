@@ -179,7 +179,8 @@ app.get("/api/all-classes", async (req, res) => {
             name: result.name,
             image: result.image,
             description: result.description,
-            price: result.price
+            price: result.price,
+            category: result.category,
         }));
 
         res.send(query);
@@ -914,7 +915,7 @@ app.get("/api/my/class", verifyRole("trainer"), async (req, res) => {
 });
 app.post("/api/create/class", verifyRole("trainer"), async (req, res) => {
     try {
-        const classData = req.body
+        const { classData } = req.body
         const userId = req.userId
         if (!userId) {
             return res.status(401).json({
@@ -932,7 +933,6 @@ app.post("/api/create/class", verifyRole("trainer"), async (req, res) => {
         res.json(result)
     } catch (error) {
         console.log(error.message);
-
         return res.status(500).json({
             message: "Failed to create class"
         });
