@@ -169,12 +169,22 @@ app.get("/api/featured-classes", async (req, res) => {
 })
 
 app.get("/api/all-classes", async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 12
+    const skip = (page - 1) * limit;
+
     try {
         const results = await classesCollection.find({
             status: "approved"
-        }).toArray();
+        }).skip(skip).limit(limit).toArray();
 
-        const query = results.map((result) => ({
+        const totalCount = await classesCollection.countDocuments(
+            {
+                status: "approved"
+            }
+        )
+
+        const formattedClasses = results.map((result) => ({
             _id: result._id,
             name: result.name,
             image: result.image,
@@ -183,7 +193,11 @@ app.get("/api/all-classes", async (req, res) => {
             category: result.category,
         }));
 
-        res.send(query);
+        res.send({
+            classes: formattedClasses || [],
+            totalPages: Math.ceil(totalCount / limit),
+            currentPage: page
+        });
 
     } catch (error) {
         console.error("ALL CLASSES ERROR:", error);
