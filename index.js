@@ -893,6 +893,11 @@ app.post("/api/post/forum/reaction/:forumId", verifyStatus(), async (req, res) =
         response: "reaction updated"
     })
 });
+// get featured forum post
+app.get("/api/featured/forum", async (req, res) => {
+    const result = await postForumCollection.find({}).sort({createdAt: -1}).limit(3).toArray()
+    res.json(result)
+})
 
 // * add forum post
 
@@ -906,7 +911,8 @@ app.post("/api/forum/post", verifyRole("trainer", "admin"), async (req, res) => 
         ...forumData,
         posterId: userId,
         likes: [],
-        dislikes: []
+        dislikes: [] , 
+        createdAt : new Date()
     })
     res.json(result)
 })
