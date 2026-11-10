@@ -2,7 +2,6 @@ const express = require('express');
 const { MongoClient, ObjectId, ServerApiVersion } = require('mongodb');
 const cors = require("cors")
 const { attachDatabasePool } = require("@vercel/functions");
-const { jwtVerify, createRemoteJWKSet } = require('jose');
 require("dotenv").config()
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
@@ -14,17 +13,18 @@ app.use(cors({
 }))
 const port = process.env.NEXT_PUBLIC_SERVER_PORT || 8008;
 
-app.use((req, res, next) => {
-    if (req.originalUrl === "/api/webhook") {
-        next()
-    } else {
-        express.json()(req, res, next)
-    }
-})
-
 app.get('/', (req, res) => {
     res.send('Hello World!');
 });
+let jwtVerify;
+let createRemoteJWKSet;
+
+const loadJose = async () => {
+    const jose = await import('jose');
+
+    jwtVerify = jose.jwtVerify;
+    createRemoteJWKSet = jose.createRemoteJWKSet;
+};
 
 const uri = process.env.MONGODB_URI
 
@@ -76,18 +76,25 @@ app.use(async (req, res, next) => {
         });
     }
 });
-const JWKS = createRemoteJWKSet(
-    new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
-);
+let JWKS;
 
+const initializeJWT = async () => {
+    await loadJose();
+
+    JWKS = createRemoteJWKSet(
+        new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+    );
+};
+
+const jwtReady = initializeJWT();
 const getUserId = async (req) => {
+    await jwtReady;
     const token = req.headers.authorization?.split(" ")[1];
 
     if (!token) return null;
 
     try {
         const { payload } = await jwtVerify(token, JWKS);
-console.log(token);
         if (typeof payload.userId !== "string") return null;
 
         return payload.userId;
@@ -1179,7 +1186,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(port, () => {
-
+    console.log(`Server is running on port ${port}`);
 });
 
 module.exports = app;
