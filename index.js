@@ -2,6 +2,7 @@ const express = require('express');
 const { MongoClient, ObjectId, ServerApiVersion } = require('mongodb');
 const cors = require("cors")
 const { attachDatabasePool } = require("@vercel/functions");
+const { jwtVerify, createRemoteJWKSet } = require('jose');
 require("dotenv").config()
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
@@ -75,20 +76,26 @@ app.use(async (req, res, next) => {
         });
     }
 });
+const JWKS = createRemoteJWKSet(
+    new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+);
 
 const getUserId = async (req) => {
-    const auth = req.headers.authorization || '';
-    if (!auth.toLowerCase().startsWith("bearer "))
-        return null;
-    const token = auth.slice(7).trim();
-    const session = await sessionCollection.findOne({
-        token, expiresAt: {
-            $gt: new Date()
-        },
-    })
+    const token = req.headers.authorization?.split(" ")[1];
 
-    return session ? session.userId.toString() : null;
-}
+    if (!token) return null;
+
+    try {
+        const { payload } = await jwtVerify(token, JWKS);
+console.log(token);
+        if (typeof payload.userId !== "string") return null;
+
+        return payload.userId;
+    } catch (error) {
+        console.error("JWT Verification Error:", error);
+        return null;
+    }
+};
 //!  verify Role
 
 
@@ -221,12 +228,12 @@ app.get("/api/class/:classId", async (req, res) => {
     const currentUser = await userCollection.findOne({
         _id: new ObjectId(userId)
     })
-    console.log(currentUser, "current");
+
     const classData = {
         ...data,
         trainerName: user?.name
     }
-    console.log(classData, "classData");
+
     if (classData.status === "approved") {
         return res.json(classData);
     }
@@ -895,7 +902,7 @@ app.post("/api/post/forum/reaction/:forumId", verifyStatus(), async (req, res) =
 });
 // get featured forum post
 app.get("/api/featured/forum", async (req, res) => {
-    const result = await postForumCollection.find({}).sort({createdAt: -1}).limit(3).toArray()
+    const result = await postForumCollection.find({}).sort({ createdAt: -1 }).limit(3).toArray()
     res.json(result)
 })
 
@@ -911,8 +918,8 @@ app.post("/api/forum/post", verifyRole("trainer", "admin"), async (req, res) => 
         ...forumData,
         posterId: userId,
         likes: [],
-        dislikes: [] , 
-        createdAt : new Date()
+        dislikes: [],
+        createdAt: new Date()
     })
     res.json(result)
 })
@@ -952,7 +959,7 @@ app.post("/api/create/class", verifyRole("trainer"), async (req, res) => {
         const result = await classesCollection.insertOne(data)
         res.json(result)
     } catch (error) {
-        console.log(error.message);
+        console.error(error.message);
         return res.status(500).json({
             message: "Failed to create class"
         });
@@ -1146,7 +1153,6 @@ app.get("/api/manage/trainers", verifyRole("admin"), async (req, res) => {
 })
 app.patch("/api/demote/trainer/:trainerId", verifyRole("admin"), async (req, res) => {
     const { trainerId } = req.params;
-    console.log(trainerId, "trainerId");
     if (!trainerId) {
         res.status(401).json({ message: "unauthorized" })
     }
@@ -1173,7 +1179,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(port, () => {
-    console.log("PORT:", port);
+
 });
 
 module.exports = app;
