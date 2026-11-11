@@ -6,7 +6,7 @@ require("dotenv").config()
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
 const app = express();
-
+app.use(express.json());
 app.use(cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
@@ -57,7 +57,6 @@ app.use(async (req, res, next) => {
 });
 
 const db = client.db("FitZone");
-const sessionCollection = db.collection("session")
 const userCollection = db.collection("user")
 const classesCollection = db.collection("classes")
 const paymentCollection = db.collection("payment")
@@ -90,9 +89,7 @@ const jwtReady = initializeJWT();
 const getUserId = async (req) => {
     await jwtReady;
     const token = req.headers.authorization?.split(" ")[1];
-
     if (!token) return null;
-
     try {
         const { payload } = await jwtVerify(token, JWKS);
         if (typeof payload.userId !== "string") return null;
@@ -218,6 +215,11 @@ app.get("/api/all-classes", async (req, res) => {
         res.status(500).json({ message: "Failed to fetch classes" });
     }
 });
+app.get("/api/totalClass", verifyRole("admin"), async (req, res) => {
+    const classes =await classesCollection.find().toArray()
+    const totalClasses = classes.length
+    res.json(totalClasses)
+})
 app.get("/api/class/:classId", async (req, res) => {
     const { classId } = req.params;
     const userId = await getUserId(req)
@@ -247,7 +249,6 @@ app.get("/api/class/:classId", async (req, res) => {
     if (
         currentUser?.role === "trainer" &&
         classData.trainerId === userId
-
 
     ) {
         return res.json(classData);
@@ -328,9 +329,9 @@ app.patch("/api/status/class/:classId", verifyRole("admin"), async (req, res) =>
 
 
 
-app.post("/api/checkout", verifyStatus(), async (req, res) => {
+app.post("/api/checkout/:classId", verifyStatus(), async (req, res) => {
     try {
-        const { classId } = req.body
+        const { classId } = req.params
         const userId = await getUserId(req)
         if (!userId)
             return res.status(401).json({ error: "please sign in" })
@@ -955,7 +956,9 @@ app.get("/api/my/class", verifyRole("trainer"), async (req, res) => {
 app.post("/api/create/class", verifyRole("trainer"), async (req, res) => {
     try {
         const { classData } = req.body
+        console.log(classData)
         const userId = req.userId
+        console.log(userId);
         if (!userId) {
             return res.status(401).json({
                 message: "unauthorized"
@@ -968,6 +971,7 @@ app.post("/api/create/class", verifyRole("trainer"), async (req, res) => {
             bookingCount: 0,
             createdAt: new Date()
         }
+        console.log(data)
         const result = await classesCollection.insertOne(data)
         res.json(result)
     } catch (error) {
