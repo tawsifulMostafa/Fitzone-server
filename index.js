@@ -96,8 +96,8 @@ const getUserId = async (req) => {
     try {
         const { payload } = await jwtVerify(token, JWKS);
         if (typeof payload.userId !== "string") return null;
-
-        return payload.userId;
+        const userId = payload.userId;
+        return userId;
     } catch (error) {
         console.error("JWT Verification Error:", error);
         return null;
@@ -547,7 +547,7 @@ app.get("/api/dashboard/favorites", async (req, res) => {
         });
     }
     const favoritesBookings = await userFavoriteCollection.find({
-        userId
+        userId: userId
     }).toArray()
     const favorites = [];
 
@@ -555,10 +555,18 @@ app.get("/api/dashboard/favorites", async (req, res) => {
         const classData = await classesCollection.findOne({
             _id: new ObjectId(favoriteBooking.classId)
         })
+        const trainer = await userCollection.findOne({
+            _id: new ObjectId(classData.trainerId)
+        })
 
         favorites.push({
-            ...favoriteBooking,
-            classData
+            classId: classData._id,
+            name: classData.name,
+            image: classData.image,
+            trainerName: trainer.name,
+            category: classData.category,
+            duration: classData.duration,
+            price: classData.price
         })
     }
     res.json(favorites)
@@ -569,7 +577,7 @@ app.get("/api/dashboard/favorites", async (req, res) => {
 app.get("/api/favorites/:classId", async (req, res) => {
     try {
         const userId = await getUserId(req);
-
+        console.log(userId)
         if (!userId) {
             return res.status(401).json({
                 message: "unauthorized"
@@ -601,7 +609,7 @@ app.get("/api/favorites/:classId", async (req, res) => {
 
 
 
-app.post("/api/favorites", async (req, res) => {
+app.post("/api/favorites/:classId", async (req, res) => {
     try {
         await userFavoriteCollection.createIndex(
             { userId: 1, classId: 1 },
@@ -613,16 +621,13 @@ app.post("/api/favorites", async (req, res) => {
                 message: "unauthorized"
             })
         }
-        const { classId } = req.body
+        const { classId } = req.params
         const cls = await classesCollection.findOne({
             _id: new ObjectId(classId)
         })
         if (!cls) {
             return res.status(404).json({ message: "Class Not Found" })
         }
-
-
-
         const result = await userFavoriteCollection.insertOne({
             userId,
             classId: cls._id,
@@ -650,7 +655,7 @@ app.delete("/api/remove/favorite/:classId", async (req, res) => {
                 message: "unauthorized"
             })
         }
-        const { classId } = req.body
+        const { classId } = req.params
         if (!classId) {
             return res.json({
                 message: "class not found"
