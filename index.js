@@ -6,7 +6,13 @@ require("dotenv").config()
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
 const app = express();
-app.use(express.json());
+app.use((req , res , next) => {
+    if(req.originalUrl === "/api/webhook"){
+        next()
+    }else{
+        express.json()(req , res , next)
+    }
+});
 app.use(cors({
     origin: process.env.CLIENT_URL || "http://localhost:3000",
     credentials: true,
