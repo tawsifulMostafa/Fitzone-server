@@ -6,11 +6,11 @@ require("dotenv").config()
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 
 const app = express();
-app.use((req , res , next) => {
-    if(req.originalUrl === "/api/webhook"){
+app.use((req, res, next) => {
+    if (req.originalUrl === "/api/webhook") {
         next()
-    }else{
-        express.json()(req , res , next)
+    } else {
+        express.json()(req, res, next)
     }
 });
 app.use(cors({
@@ -222,7 +222,7 @@ app.get("/api/all-classes", async (req, res) => {
     }
 });
 app.get("/api/totalClass", verifyRole("admin"), async (req, res) => {
-    const classes =await classesCollection.find().toArray()
+    const classes = await classesCollection.find().toArray()
     const totalClasses = classes.length
     res.json(totalClasses)
 })
@@ -681,16 +681,40 @@ app.delete("/api/remove/favorite/:classId", async (req, res) => {
 // delete my-class for admin and trainer..!
 app.delete("/api/post/forum/:forumId", verifyRole("admin", "trainer"), async (req, res) => {
     const userId = req.userId
+    const { forumId } = req.params
+
     if (!userId) {
         return res.status(403).json({
             message: "forbidden"
         })
     }
-    const { forumId } = req.params
-    const result = await postForumCollection.deleteOne({
-        posterId: userId,
-        _id: new ObjectId(forumId)
+
+    const currentUser = await userCollection.findOne({
+        _id: new ObjectId(userId)
     })
+
+    if (!currentUser) {
+        return res.status(404).json({
+            message: "User not found"
+        })
+    }
+
+    const query = {
+        _id: new ObjectId(forumId)
+    }
+
+    if (currentUser.role !== "admin") {
+        query.posterId = userId
+    }
+
+    const result = await postForumCollection.deleteOne(query)
+
+    if (!result.deletedCount) {
+        return res.status(404).json({
+            message: "Forum not found or you are not authorized to delete it"
+        })
+    }
+
     res.json(result)
 })
 // TRAINER APIS
